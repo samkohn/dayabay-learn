@@ -158,10 +158,15 @@ class IBDPairConvAe(AbstractNetwork):
 
     def minibatch_iterator(self, x, y=None):
         '''Return a generator that goes through the set in mini-batches.
-        '''
-        if y is not None:
-            raise ValueError("We don't need labels here")
 
+        If y is given, it is interpreted as a vector of target classes, and the
+        returned minibatches are tuples of (input, target). If y is not given
+        (or is None), then the returned minibatches are simply the ndarray of
+        input.
+        '''
+        if (y is not None) and (x.shape[0] != y.shape[0]):
+            raise ValueError("x and y have mismatched shapes: %s vs. %s" %
+                    (x.shape, y.shape))
         def minibatches():
             numinputs = x.shape[0]
             indices = np.arange(numinputs)
@@ -175,21 +180,34 @@ class IBDPairConvAe(AbstractNetwork):
                 upper = numinputs
             for i in xrange(0, upper, self.minibatch_size):
                 excerpt = slice(i, i + self.minibatch_size)
-                yield x[indices[excerpt]]
+                if y is None:
+                    yield x[indices[excerpt]]
+                else:
+                    yield (x[indices[excerpt]], y[indices[excerpt]])
         return minibatches
 
     def fit(self, x_train, y_train=None):
-        '''Fit and train the autoencoder to the x_train data.'''
-        if y_train is not None:
-            raise ValueError("We don't need labels here")
+        '''Fit and train the autoencoder to the x_train data.
+
+        If y_train is given, assume that it is an array of targets. Obviously
+        y_train should not be given if this base class is used, but some
+        subclasses use supervised training.'''
         for epoch in xrange(self.epochs):
-            minibatches = self.minibatch_iterator(x_train)
-            for inputs in minibatches():
-                cost = self.train_once(inputs)[0]
+            minibatches = self.minibatch_iterator(x_train, y_train)
+            for batch in minibatches():
+                if y_train is None:
+                    inputs = batch
+                    cost = self.train_once(inputs)[0]
+                else:
+                    inputs = batch[0]
+                    targets = batch[1]
+                    cost = self.train_once(inputs, targets)[0]
             kwargs = {
                 'cost': cost,
                 'epoch': epoch,
                 'input': x_train[:self.num_examples],
+                'target': (y_train[:self.num_examples] if y_train is not None
+                           else None),
                 'output': self.predict_fn(x_train[:self.num_examples])[1]
             }
             for fn in self.epoch_loop_hooks:
@@ -314,3 +332,77 @@ class IBDChargeDenoisingConvAe(IBDPairConvAe2):
         network = self._default_network_with_input(network)
         network.nonlinearity = l.nonlinearities.tanh
         return network
+
+class SinglesClassifier(IBDPairConvAe):
+    '''A convolutional NN which classifies single triggers in a supervised
+    manner.'''
+    def __init__(self, *args, **kwargs):
+        '''Initialize the network.'''
+        nchannels = 1
+        self.num_classes = 2
+        self.target_var = T.dtensor('target')
+        super(SinglesClassifier, self).__init__(*args, nchannels=nchannels, **kwargs)
+        self.train_once = theano.function([self.input_var, self.target_var],
+            [self.train_cost], updates=self.optimizer)
+
+    def _default_network_with_input(self, incoming):
+        num_filters = 128
+        initial_weights = l.init.Normal(1.0/self.num_features, 0)
+        network = incoming
+        # post-conv shape = (minibatch_size, num_filters, 8, 24)
+        network = l.layers.Conv2DLayer(
+            network,
+            name='conv1',
+            num_filters=num_filters,
+            filter_size=(5, 5),
+            pad=(2, 2),
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.rectify)
+        # post-pool shape = (minibatch_size, num_filters, 4, 12)
+        network = l.layers.MaxPool2DLayer(
+            network,
+            name='pool1',
+            pool_size=(2, 2))
+        # post-conv shape = (minibatch_size, num_filters, 4, 10)
+        network = l.layers.Conv2DLayer(
+            network,
+            name='conv2',
+            num_filters=num_filters,
+            filter_size=(3, 3),
+            pad=(1, 0),
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.rectify)
+        # post-pool shape = (minibatch_size, num_filters, 2, 5)
+        network = l.layers.MaxPool2DLayer(
+            network,
+            name='pool2',
+            pool_size=(2, 2))
+        # post-conv shape = (minibatch_size, bottleneck_width, 1, 1)
+        network = l.layers.Conv2DLayer(
+            network,
+            name='bottleneck',
+            num_filters=self.bottleneck_width,
+            filter_size=(2, 5),
+            pad=0,
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.rectify)
+        # One last fully-connected layer
+        network = l.layers.DenseLayer(
+            network,
+            num_units=self.num_classes,
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.softmax)
+        return network
+    def _setup_cost(self, deterministic, array=False, **kwargs):
+        '''Construct the cross-entropy between the train set and the output.
+
+        Must be called after self.network is defined.'''
+        if deterministic:
+            prediction = self.test_prediction
+        else:
+            prediction = self.train_prediction
+        cost = l.objectives.categorical_crossentropy(prediction,
+                self.target_var)
+        if not array:
+            cost = l.objectives.aggregate(cost, mode='mean')
+        return cost
