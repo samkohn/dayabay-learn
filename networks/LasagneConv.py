@@ -1,6 +1,7 @@
 '''The Lasagne NN module for Daya Bay data'''
 
 import numpy as np
+import logging
 import theano
 import theano.tensor as T
 import lasagne as l
@@ -34,9 +35,13 @@ class IBDPairConvAe(AbstractNetwork):
                 weighted=weighted)
         self.test_cost = self._setup_cost(deterministic=True, array=True)
         self.optimizer = self._setup_optimizer()
-        self.train_once = theano.function([self.input_var],
+        if hasattr(self, 'target_var'):
+            inputs = [self.input_var, self.target_var]
+        else:
+            inputs = [self.input_var]
+        self.train_once = theano.function(inputs,
             [self.train_cost], updates=self.optimizer)
-        self.predict_fn = theano.function([self.input_var],
+        self.predict_fn = theano.function(inputs,
             [self.test_cost, self.test_prediction])
 
     def _setup_network(self):
@@ -198,17 +203,25 @@ class IBDPairConvAe(AbstractNetwork):
                 if y_train is None:
                     inputs = batch
                     cost = self.train_once(inputs)[0]
+                    predict_fn_args = (x_train[:self.num_examples],)
                 else:
                     inputs = batch[0]
                     targets = batch[1]
+                    logging.info('inputs.shape = %s', str(inputs.shape))
+                    logging.info('targets.shape = %s', str(targets.shape))
+                    logging.info('prediction shape = %s',
+                            str(self.train_prediction.shape.eval({
+                                self.input_var: inputs})))
                     cost = self.train_once(inputs, targets)[0]
+                    predict_fn_args = (x_train[:self.num_examples],
+                        y_train[:self.num_examples])
             kwargs = {
                 'cost': cost,
                 'epoch': epoch,
                 'input': x_train[:self.num_examples],
                 'target': (y_train[:self.num_examples] if y_train is not None
                            else None),
-                'output': self.predict_fn(x_train[:self.num_examples])[1]
+                'output': self.predict_fn(*predict_fn_args)[1]
             }
             for fn in self.epoch_loop_hooks:
                 fn(**kwargs)
@@ -340,10 +353,10 @@ class SinglesClassifier(IBDPairConvAe):
         '''Initialize the network.'''
         nchannels = 1
         self.num_classes = 2
-        self.target_var = T.dtensor('target')
+        self.target_var = T.lvector('target')
         super(SinglesClassifier, self).__init__(*args, nchannels=nchannels, **kwargs)
-        self.train_once = theano.function([self.input_var, self.target_var],
-            [self.train_cost], updates=self.optimizer)
+        #self.train_once = theano.function([self.input_var, self.target_var],
+            #[self.train_cost], updates=self.optimizer)
 
     def _default_network_with_input(self, incoming):
         num_filters = 128

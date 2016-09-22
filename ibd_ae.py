@@ -43,6 +43,7 @@ def setup_parser():
             'IBDPairConvAe',
             'IBDPairConvAe2',
             'IBDChargeDenoisingConvAe',
+            'SinglesClassifier',
         ],
         help='network to use')
     parser.add_argument('--accidental-fraction', type=float, default=0,
@@ -74,6 +75,7 @@ if __name__ == "__main__":
     from util.helper_fxns import make_accidentals
     from networks.LasagneConv import IBDPairConvAe, IBDPairConvAe2
     from networks.LasagneConv import IBDChargeDenoisingConvAe
+    from networks.LasagneConv import SinglesClassifier
 
     make_progress_plots = False
     if args.verbose == 0:
@@ -101,6 +103,9 @@ if __name__ == "__main__":
     num_ibds = int(round((1 - args.accidental_fraction) * args.numpairs))
     train, val, test = get_ibd_data(tot_num_pairs=num_ibds,
         just_charges=only_charge, train_frac=1, valid_frac=0)
+    train_IBD = train
+    val_IBD = val
+    test_IBD = test
     if args.accidental_fraction > 0:
         num_accidentals = args.numpairs - num_ibds
         if args.accidental_location is None:
@@ -118,6 +123,18 @@ if __name__ == "__main__":
     preprocess = cae.preprocess_data(train)
     preprocess(val)
     preprocess(test)
+
+    if args.network == 'SinglesClassifier':
+        train_targets = np.zeros((train.shape[0]), dtype=int)
+        val_targets = np.zeros((val.shape[0]), dtype=int)
+        test_targets = np.zeros((test.shape[0]), dtype=int)
+        train_targets[train_IBD.shape[0]:] = 1
+        val_targets[val_IBD.shape[0]:] = 1
+        test_targets[test_IBD.shape[0]:] = 1
+        train = train[:, 0:1, :, :]
+        val = val[:, 0:1, :, :]
+        test = test[:, 0:1, :, :]
+
 
     # set up a decorator to only run the function if the epoch is at the
     # appropriate value (usually == 0 (mod 10) or some such thing)
@@ -197,7 +214,10 @@ if __name__ == "__main__":
     if args.save_model:
         cae.epoch_loop_hooks.append(saveparameters)
     logging.info('Training network with %d samples', train.shape[0])
-    cae.fit(train)
+    if args.network == 'SinglesClassifier':
+        cae.fit(train, train_targets)
+    else:
+        cae.fit(train)
 
 
     if args.tsne:
