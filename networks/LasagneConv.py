@@ -20,6 +20,7 @@ class IBDPairConvAe(AbstractNetwork):
         # Shapes are given as (batch, depth, height, width)
         nchannels = kwargs.get('nchannels', 4)
         weighted = kwargs.get('weighted_cost', False)
+        self.num_examples = minibatch_size
         self.minibatch_shape = (minibatch_size, nchannels, 8, 24)
         self.minibatch_size = minibatch_size
         self.image_shape = self.minibatch_shape[1:-1]
@@ -207,11 +208,6 @@ class IBDPairConvAe(AbstractNetwork):
                 else:
                     inputs = batch[0]
                     targets = batch[1]
-                    logging.info('inputs.shape = %s', str(inputs.shape))
-                    logging.info('targets.shape = %s', str(targets.shape))
-                    logging.info('prediction shape = %s',
-                            str(self.train_prediction.shape.eval({
-                                self.input_var: inputs})))
                     cost = self.train_once(inputs, targets)[0]
                     predict_fn_args = (x_train[:self.num_examples],
                         y_train[:self.num_examples])
@@ -228,9 +224,10 @@ class IBDPairConvAe(AbstractNetwork):
 
     def predict(self, x, y=None):
         '''Predict the autoencoded image without training.'''
-        if y is not None:
-            raise ValueError("We don't need labels here")
-        return self.predict_fn(x)
+        if y is None:
+            return self.predict_fn(x)
+        else:
+            return self.predict_fn(x, y)
 
     def extract_layer(self, data, layer):
         '''Extract the output of the given layer.'''

@@ -89,6 +89,8 @@ if __name__ == "__main__":
         logging.getLogger().setLevel(logging.DEBUG)
         make_progress_plots = True
 
+    supervised = set(['SinglesClassifier'])
+
     #class for networks architecture
     logging.info('Constructing untrained ConvNet of class %s', args.network)
     convnet_class = eval(args.network)
@@ -210,11 +212,12 @@ if __name__ == "__main__":
     if make_progress_plots:
         cae.epoch_loop_hooks.append(record_cost_curve)
         cae.epoch_loop_hooks.append(plot_cost_curve)
-        cae.epoch_loop_hooks.append(plotcomparisons)
+        if args.network not in supervised:
+            cae.epoch_loop_hooks.append(plotcomparisons)
     if args.save_model:
         cae.epoch_loop_hooks.append(saveparameters)
     logging.info('Training network with %d samples', train.shape[0])
-    if args.network == 'SinglesClassifier':
+    if args.network in supervised:
         cae.fit(train, train_targets)
     else:
         cae.fit(train)
@@ -236,9 +239,20 @@ if __name__ == "__main__":
 
     if args.save_prediction is not None:
         logging.info('Saving autoencoder output')
-        train_cost_prediction = cae.predict(train)
-        val_cost_prediction = cae.predict(val)
-        test_cost_prediction = cae.predict(test)
+        if args.network in supervised:
+            logging.debug('train.shape = %s', str(train.shape))
+            logging.debug('train targets.shape = %s', str(train_targets.shape))
+            train_cost_prediction = cae.predict(train, train_targets)
+            logging.debug('val.shape = %s', str(val.shape))
+            logging.debug('val targets.shape = %s', str(val_targets.shape))
+            val_cost_prediction = cae.predict(val, val_targets)
+            logging.debug('test.shape = %s', str(test.shape))
+            logging.debug('test targets.shape = %s', str(test_targets.shape))
+            test_cost_prediction = cae.predict(test, test_targets)
+        else:
+            train_cost_prediction = cae.predict(train)
+            val_cost_prediction = cae.predict(val)
+            test_cost_prediction = cae.predict(test)
         outdata = np.vstack((train_cost_prediction[1], val_cost_prediction[1],
             test_cost_prediction[1]))
         outcosts = np.vstack((train_cost_prediction[0], val_cost_prediction[0],
