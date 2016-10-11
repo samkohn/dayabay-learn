@@ -92,8 +92,8 @@ if __name__ == '__main__':
         for condition in args.condition:
             f = conditions[condition]
             mask = f(data)
-            plt.plot(result[~mask, 0], result[~mask, 1], 'bo')
-            plt.plot(result[mask, 0], result[mask, 1], 'ro')
+            plt.plot(result[~mask, 0], result[~mask, 1], 'b.')
+            plt.plot(result[mask, 0], result[mask, 1], 'r.')
             plt.legend(['not %s' % condition, condition])
             print "saving plot"
             plt.savefig(condition + args.output)
