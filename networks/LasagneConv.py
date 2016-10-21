@@ -224,10 +224,38 @@ class IBDPairConvAe(AbstractNetwork):
 
     def predict(self, x, y=None):
         '''Predict the autoencoded image without training.'''
+        # loop by minibatch (this time not randomized)
+        output_cost = np.empty(len(x))
         if y is None:
-            return self.predict_fn(x)
+            output_prediction = np.empty_like(x)
         else:
-            return self.predict_fn(x, y)
+            output_prediction = np.empty((len(y), self.num_classes))
+
+        for i in range(0, len(x)-self.minibatch_size + 1, self.minibatch_size):
+            minislice = slice(i, i + self.minibatch_size)
+            if y is None:
+                prediction = self.predict_fn(x[minislice])
+            else:
+                prediction = self.predict_fn(x[minislice], y[minislice])
+            output_cost[minislice] = prediction[0]
+            output_prediction[minislice] = prediction[1]
+        # account for any remaining inputs that don't make a complete minibatch
+        num_extras = len(x) % self.minibatch_size
+        if num_extras == 0:
+            return (output_cost, output_prediction)
+        endslice = slice(len(x) - num_extras, len(x))
+        fillerslice = slice(0, self.minibatch_size - num_extras)
+        x_end = np.vstack((x[endslice], x[fillerslice]))
+        if y is None:
+            prediction = self.predict_fn(x_end)
+        else:
+            logging.debug('y[endslice].shape = %s', str(y[endslice].shape))
+            logging.debug('y[fillerslice].shape = %s', str(y[fillerslice].shape))
+            y_end = np.concatenate((y[endslice], y[fillerslice]), axis=0)
+            prediction = self.predict_fn(x_end, y_end)
+        output_cost[endslice] = prediction[0][:num_extras]
+        output_prediction[endslice] = prediction[1][:num_extras]
+        return (output_cost, output_prediction)
 
     def extract_layer(self, data, layer):
         '''Extract the output of the given layer.'''
