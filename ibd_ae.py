@@ -255,8 +255,8 @@ if __name__ == "__main__":
             test_cost_prediction = cae.predict(test)
         outdata = np.vstack((train_cost_prediction[1], val_cost_prediction[1],
             test_cost_prediction[1]))
-        outcosts = np.vstack((train_cost_prediction[0], val_cost_prediction[0],
-            test_cost_prediction[0]))
+        outcosts = np.concatenate((train_cost_prediction[0], val_cost_prediction[0],
+            test_cost_prediction[0]), axis=0)
         indata = np.vstack((train, val, test))
         filename = os.path.join(args.out_dir, args.save_prediction)
         outfile = h5py.File(filename, 'w')
