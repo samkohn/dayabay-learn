@@ -126,3 +126,16 @@ def get_equal_per_class(X,y, nclass):
     
     return X,y
 
+def standardize_cylinder_rotation(data):
+    '''cyclicly permute each event so that the PMT with the most delayed charge
+    is in column 12.'''
+    center_column = 12
+    delayed_charge_index = 2
+    for i in xrange(data.shape[0]):
+        event = data[i]
+        delayed_charge = event[delayed_charge_index]
+        argmax_flat = np.argmax(delayed_charge)
+        argmax = np.unravel_index(argmax_flat, delayed_charge.shape)
+        column_with_max = argmax[1]
+        columns_to_shift = center_column - column_with_max
+        data[i] = np.roll(event, columns_to_shift, axis=2)
