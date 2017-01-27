@@ -282,14 +282,16 @@ class IBDPairConvAe(AbstractNetwork):
             - Center the data on 0
             - Scale it to have a standard deviation of 1'''
         std = 1
-        preprocessing.fix_time_zeros(x)
+        if not getattr(self, 'only_charge', False):
+            preprocessing.fix_time_zeros(x)
         means = preprocessing.center(x)
         stds = preprocessing.scale(x, std, mode='standardize')
         def repeat_transformation(other):
             if len(other) == 0:
                 return
             else:
-                preprocessing.fix_time_zeros(other)
+                if not getattr(self, 'only_charge', False):
+                    preprocessing.fix_time_zeros(other)
                 other -= means
                 other /= stds/std
         return repeat_transformation
@@ -378,6 +380,7 @@ class SinglesClassifier(IBDPairConvAe):
         '''Initialize the network.'''
         nchannels = 1
         self.num_classes = 2
+        self.only_charge = True
         self.target_var = T.lvector('target')
         super(SinglesClassifier, self).__init__(*args, nchannels=nchannels, **kwargs)
         #self.train_once = theano.function([self.input_var, self.target_var],

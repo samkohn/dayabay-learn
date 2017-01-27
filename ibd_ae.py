@@ -104,10 +104,14 @@ if __name__ == "__main__":
     only_charge = getattr(cae, 'only_charge', False)
     num_ibds = int(round((1 - args.accidental_fraction) * args.numpairs))
     train, val, test = get_ibd_data(tot_num_pairs=num_ibds,
-        just_charges=only_charge, train_frac=1, valid_frac=0)
+        just_charges=only_charge, train_frac=0.5, valid_frac=0.25)
     train_IBD = train
     val_IBD = val
     test_IBD = test
+    if args.network == 'SinglesClassifier':
+        train = train[:, 1:2, :, :]
+        val = val[:, 1:2, :, :]
+        test = test[:, 1:2, :, :]
     if args.accidental_fraction > 0:
         num_accidentals = args.numpairs - num_ibds
         if args.accidental_location is None:
@@ -118,7 +122,12 @@ if __name__ == "__main__":
         train_acc, val_acc, test_acc = get_ibd_data(
                 path=path, tot_num_pairs=num_accidentals,
                 just_charges=only_charge, h5dataset=dsetname,
-                train_frac=1, valid_frac=0)
+                train_frac=0.5, valid_frac=0.25)
+        if args.network == 'SinglesClassifier':
+            train_acc = train_acc[:, 0:1, :, :]
+            val_acc = val_acc[:, 0:1, :, :]
+            test_acc = test_acc[:, 0:1, :, :]
+        logging.debug('train_acc[0] = %s', str(train_acc[0]))
         train = np.vstack((train, train_acc))
         val = np.vstack((val, val_acc))
         test = np.vstack((test, test_acc))
@@ -133,9 +142,9 @@ if __name__ == "__main__":
         train_targets[train_IBD.shape[0]:] = 1
         val_targets[val_IBD.shape[0]:] = 1
         test_targets[test_IBD.shape[0]:] = 1
-        train = train[:, 0:1, :, :]
-        val = val[:, 0:1, :, :]
-        test = test[:, 0:1, :, :]
+        #train = train[:, 1:2, :, :]
+        #val = val[:, 1:2, :, :]
+        #test = test[:, 1:2, :, :]
 
 
     # set up a decorator to only run the function if the epoch is at the
