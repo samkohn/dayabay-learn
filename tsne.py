@@ -63,7 +63,7 @@ if __name__ == '__main__':
         data = np.vstack((data, acc_data))
         ids = np.hstack((ids, np.ones((acc_data.shape[0]))))
 
-    Get bottleneck layer output for each set
+    #Get bottleneck layer output for each set
     preprocess = cae.preprocess_data(data)
     for i in range(args.num_batches):
         range_to_feed = slice(i*args.minibatch_size, (i+1)*args.minibatch_size)
@@ -73,7 +73,7 @@ if __name__ == '__main__':
         else:
             features = np.vstack((features, features_tmp[:, :, 0, 0]))
 
-    set up different colors
+    #set up different colors
     conditions = {}
     def isaccidental(batch):
         '''Return an array of bools which are True if the corresponding image
@@ -92,8 +92,8 @@ if __name__ == '__main__':
         for condition in args.condition:
             f = conditions[condition]
             mask = f(data)
-            plt.plot(result[~mask, 0], result[~mask, 1], 'bo')
-            plt.plot(result[mask, 0], result[mask, 1], 'ro')
+            plt.plot(result[~mask, 0], result[~mask, 1], 'b.')
+            plt.plot(result[mask, 0], result[mask, 1], 'r.')
             plt.legend(['not %s' % condition, condition])
             print "saving plot"
             plt.savefig(condition + args.output)

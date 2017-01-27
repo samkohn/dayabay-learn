@@ -43,6 +43,7 @@ def setup_parser():
             'IBDPairConvAe',
             'IBDPairConvAe2',
             'IBDChargeDenoisingConvAe',
+            'SinglesClassifier',
         ],
         help='network to use')
     parser.add_argument('--accidental-fraction', type=float, default=0,
@@ -74,6 +75,7 @@ if __name__ == "__main__":
     from util.helper_fxns import make_accidentals
     from networks.LasagneConv import IBDPairConvAe, IBDPairConvAe2
     from networks.LasagneConv import IBDChargeDenoisingConvAe
+    from networks.LasagneConv import SinglesClassifier
 
     make_progress_plots = False
     if args.verbose == 0:
@@ -86,6 +88,8 @@ if __name__ == "__main__":
     else:
         logging.getLogger().setLevel(logging.DEBUG)
         make_progress_plots = True
+
+    supervised = set(['SinglesClassifier'])
 
     #class for networks architecture
     logging.info('Constructing untrained ConvNet of class %s', args.network)
@@ -100,7 +104,14 @@ if __name__ == "__main__":
     only_charge = getattr(cae, 'only_charge', False)
     num_ibds = int(round((1 - args.accidental_fraction) * args.numpairs))
     train, val, test = get_ibd_data(tot_num_pairs=num_ibds,
-        just_charges=only_charge, train_frac=1, valid_frac=0)
+        just_charges=only_charge, train_frac=0.5, valid_frac=0.25)
+    train_IBD = train
+    val_IBD = val
+    test_IBD = test
+    if args.network == 'SinglesClassifier':
+        train = train[:, 1:2, :, :]
+        val = val[:, 1:2, :, :]
+        test = test[:, 1:2, :, :]
     if args.accidental_fraction > 0:
         num_accidentals = args.numpairs - num_ibds
         if args.accidental_location is None:
@@ -111,13 +122,30 @@ if __name__ == "__main__":
         train_acc, val_acc, test_acc = get_ibd_data(
                 path=path, tot_num_pairs=num_accidentals,
                 just_charges=only_charge, h5dataset=dsetname,
-                train_frac=1, valid_frac=0)
+                train_frac=0.5, valid_frac=0.25)
+        if args.network == 'SinglesClassifier':
+            train_acc = train_acc[:, 0:1, :, :]
+            val_acc = val_acc[:, 0:1, :, :]
+            test_acc = test_acc[:, 0:1, :, :]
+        logging.debug('train_acc[0] = %s', str(train_acc[0]))
         train = np.vstack((train, train_acc))
         val = np.vstack((val, val_acc))
         test = np.vstack((test, test_acc))
     preprocess = cae.preprocess_data(train)
     preprocess(val)
     preprocess(test)
+
+    if args.network == 'SinglesClassifier':
+        train_targets = np.zeros((train.shape[0]), dtype=int)
+        val_targets = np.zeros((val.shape[0]), dtype=int)
+        test_targets = np.zeros((test.shape[0]), dtype=int)
+        train_targets[train_IBD.shape[0]:] = 1
+        val_targets[val_IBD.shape[0]:] = 1
+        test_targets[test_IBD.shape[0]:] = 1
+        #train = train[:, 1:2, :, :]
+        #val = val[:, 1:2, :, :]
+        #test = test[:, 1:2, :, :]
+
 
     # set up a decorator to only run the function if the epoch is at the
     # appropriate value (usually == 0 (mod 10) or some such thing)
@@ -193,11 +221,15 @@ if __name__ == "__main__":
     if make_progress_plots:
         cae.epoch_loop_hooks.append(record_cost_curve)
         cae.epoch_loop_hooks.append(plot_cost_curve)
-        cae.epoch_loop_hooks.append(plotcomparisons)
+        if args.network not in supervised:
+            cae.epoch_loop_hooks.append(plotcomparisons)
     if args.save_model:
         cae.epoch_loop_hooks.append(saveparameters)
     logging.info('Training network with %d samples', train.shape[0])
-    cae.fit(train)
+    if args.network in supervised:
+        cae.fit(train, train_targets)
+    else:
+        cae.fit(train)
 
 
     if args.tsne:
@@ -216,13 +248,24 @@ if __name__ == "__main__":
 
     if args.save_prediction is not None:
         logging.info('Saving autoencoder output')
-        train_cost_prediction = cae.predict(train)
-        val_cost_prediction = cae.predict(val)
-        test_cost_prediction = cae.predict(test)
+        if args.network in supervised:
+            logging.debug('train.shape = %s', str(train.shape))
+            logging.debug('train targets.shape = %s', str(train_targets.shape))
+            train_cost_prediction = cae.predict(train, train_targets)
+            logging.debug('val.shape = %s', str(val.shape))
+            logging.debug('val targets.shape = %s', str(val_targets.shape))
+            val_cost_prediction = cae.predict(val, val_targets)
+            logging.debug('test.shape = %s', str(test.shape))
+            logging.debug('test targets.shape = %s', str(test_targets.shape))
+            test_cost_prediction = cae.predict(test, test_targets)
+        else:
+            train_cost_prediction = cae.predict(train)
+            val_cost_prediction = cae.predict(val)
+            test_cost_prediction = cae.predict(test)
         outdata = np.vstack((train_cost_prediction[1], val_cost_prediction[1],
             test_cost_prediction[1]))
-        outcosts = np.vstack((train_cost_prediction[0], val_cost_prediction[0],
-            test_cost_prediction[0]))
+        outcosts = np.concatenate((train_cost_prediction[0], val_cost_prediction[0],
+            test_cost_prediction[0]), axis=0)
         indata = np.vstack((train, val, test))
         filename = os.path.join(args.out_dir, args.save_prediction)
         outfile = h5py.File(filename, 'w')

@@ -1,6 +1,7 @@
 '''The Lasagne NN module for Daya Bay data'''
 
 import numpy as np
+import logging
 import theano
 import theano.tensor as T
 import lasagne as l
@@ -19,6 +20,7 @@ class IBDPairConvAe(AbstractNetwork):
         # Shapes are given as (batch, depth, height, width)
         nchannels = kwargs.get('nchannels', 4)
         weighted = kwargs.get('weighted_cost', False)
+        self.num_examples = minibatch_size
         self.minibatch_shape = (minibatch_size, nchannels, 8, 24)
         self.minibatch_size = minibatch_size
         self.image_shape = self.minibatch_shape[1:-1]
@@ -34,9 +36,13 @@ class IBDPairConvAe(AbstractNetwork):
                 weighted=weighted)
         self.test_cost = self._setup_cost(deterministic=True, array=True)
         self.optimizer = self._setup_optimizer()
-        self.train_once = theano.function([self.input_var],
+        if hasattr(self, 'target_var'):
+            inputs = [self.input_var, self.target_var]
+        else:
+            inputs = [self.input_var]
+        self.train_once = theano.function(inputs,
             [self.train_cost], updates=self.optimizer)
-        self.predict_fn = theano.function([self.input_var],
+        self.predict_fn = theano.function(inputs,
             [self.test_cost, self.test_prediction])
 
     def _setup_network(self):
@@ -158,10 +164,15 @@ class IBDPairConvAe(AbstractNetwork):
 
     def minibatch_iterator(self, x, y=None):
         '''Return a generator that goes through the set in mini-batches.
-        '''
-        if y is not None:
-            raise ValueError("We don't need labels here")
 
+        If y is given, it is interpreted as a vector of target classes, and the
+        returned minibatches are tuples of (input, target). If y is not given
+        (or is None), then the returned minibatches are simply the ndarray of
+        input.
+        '''
+        if (y is not None) and (x.shape[0] != y.shape[0]):
+            raise ValueError("x and y have mismatched shapes: %s vs. %s" %
+                    (x.shape, y.shape))
         def minibatches():
             numinputs = x.shape[0]
             indices = np.arange(numinputs)
@@ -175,31 +186,76 @@ class IBDPairConvAe(AbstractNetwork):
                 upper = numinputs
             for i in xrange(0, upper, self.minibatch_size):
                 excerpt = slice(i, i + self.minibatch_size)
-                yield x[indices[excerpt]]
+                if y is None:
+                    yield x[indices[excerpt]]
+                else:
+                    yield (x[indices[excerpt]], y[indices[excerpt]])
         return minibatches
 
     def fit(self, x_train, y_train=None):
-        '''Fit and train the autoencoder to the x_train data.'''
-        if y_train is not None:
-            raise ValueError("We don't need labels here")
+        '''Fit and train the autoencoder to the x_train data.
+
+        If y_train is given, assume that it is an array of targets. Obviously
+        y_train should not be given if this base class is used, but some
+        subclasses use supervised training.'''
         for epoch in xrange(self.epochs):
-            minibatches = self.minibatch_iterator(x_train)
-            for inputs in minibatches():
-                cost = self.train_once(inputs)[0]
+            minibatches = self.minibatch_iterator(x_train, y_train)
+            for batch in minibatches():
+                if y_train is None:
+                    inputs = batch
+                    cost = self.train_once(inputs)[0]
+                    predict_fn_args = (x_train[:self.num_examples],)
+                else:
+                    inputs = batch[0]
+                    targets = batch[1]
+                    cost = self.train_once(inputs, targets)[0]
+                    predict_fn_args = (x_train[:self.num_examples],
+                        y_train[:self.num_examples])
             kwargs = {
                 'cost': cost,
                 'epoch': epoch,
                 'input': x_train[:self.num_examples],
-                'output': self.predict_fn(x_train[:self.num_examples])[1]
+                'target': (y_train[:self.num_examples] if y_train is not None
+                           else None),
+                'output': self.predict_fn(*predict_fn_args)[1]
             }
             for fn in self.epoch_loop_hooks:
                 fn(**kwargs)
 
     def predict(self, x, y=None):
         '''Predict the autoencoded image without training.'''
-        if y is not None:
-            raise ValueError("We don't need labels here")
-        return self.predict_fn(x)
+        # loop by minibatch (this time not randomized)
+        output_cost = np.empty(len(x))
+        if y is None:
+            output_prediction = np.empty_like(x)
+        else:
+            output_prediction = np.empty((len(y), self.num_classes))
+
+        for i in range(0, len(x)-self.minibatch_size + 1, self.minibatch_size):
+            minislice = slice(i, i + self.minibatch_size)
+            if y is None:
+                prediction = self.predict_fn(x[minislice])
+            else:
+                prediction = self.predict_fn(x[minislice], y[minislice])
+            output_cost[minislice] = prediction[0]
+            output_prediction[minislice] = prediction[1]
+        # account for any remaining inputs that don't make a complete minibatch
+        num_extras = len(x) % self.minibatch_size
+        if num_extras == 0:
+            return (output_cost, output_prediction)
+        endslice = slice(len(x) - num_extras, len(x))
+        fillerslice = slice(0, self.minibatch_size - num_extras)
+        x_end = np.vstack((x[endslice], x[fillerslice]))
+        if y is None:
+            prediction = self.predict_fn(x_end)
+        else:
+            logging.debug('y[endslice].shape = %s', str(y[endslice].shape))
+            logging.debug('y[fillerslice].shape = %s', str(y[fillerslice].shape))
+            y_end = np.concatenate((y[endslice], y[fillerslice]), axis=0)
+            prediction = self.predict_fn(x_end, y_end)
+        output_cost[endslice] = prediction[0][:num_extras]
+        output_prediction[endslice] = prediction[1][:num_extras]
+        return (output_cost, output_prediction)
 
     def extract_layer(self, data, layer):
         '''Extract the output of the given layer.'''
@@ -226,14 +282,16 @@ class IBDPairConvAe(AbstractNetwork):
             - Center the data on 0
             - Scale it to have a standard deviation of 1'''
         std = 1
-        preprocessing.fix_time_zeros(x)
+        if not getattr(self, 'only_charge', False):
+            preprocessing.fix_time_zeros(x)
         means = preprocessing.center(x)
         stds = preprocessing.scale(x, std, mode='standardize')
         def repeat_transformation(other):
             if len(other) == 0:
                 return
             else:
-                preprocessing.fix_time_zeros(other)
+                if not getattr(self, 'only_charge', False):
+                    preprocessing.fix_time_zeros(other)
                 other -= means
                 other /= stds/std
         return repeat_transformation
@@ -314,3 +372,78 @@ class IBDChargeDenoisingConvAe(IBDPairConvAe2):
         network = self._default_network_with_input(network)
         network.nonlinearity = l.nonlinearities.tanh
         return network
+
+class SinglesClassifier(IBDPairConvAe):
+    '''A convolutional NN which classifies single triggers in a supervised
+    manner.'''
+    def __init__(self, *args, **kwargs):
+        '''Initialize the network.'''
+        nchannels = 1
+        self.num_classes = 2
+        self.only_charge = True
+        self.target_var = T.lvector('target')
+        super(SinglesClassifier, self).__init__(*args, nchannels=nchannels, **kwargs)
+        #self.train_once = theano.function([self.input_var, self.target_var],
+            #[self.train_cost], updates=self.optimizer)
+
+    def _default_network_with_input(self, incoming):
+        num_filters = 128
+        initial_weights = l.init.Normal(1.0/self.num_features, 0)
+        network = incoming
+        # post-conv shape = (minibatch_size, num_filters, 8, 24)
+        network = l.layers.Conv2DLayer(
+            network,
+            name='conv1',
+            num_filters=num_filters,
+            filter_size=(5, 5),
+            pad=(2, 2),
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.rectify)
+        # post-pool shape = (minibatch_size, num_filters, 4, 12)
+        network = l.layers.MaxPool2DLayer(
+            network,
+            name='pool1',
+            pool_size=(2, 2))
+        # post-conv shape = (minibatch_size, num_filters, 4, 10)
+        network = l.layers.Conv2DLayer(
+            network,
+            name='conv2',
+            num_filters=num_filters,
+            filter_size=(3, 3),
+            pad=(1, 0),
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.rectify)
+        # post-pool shape = (minibatch_size, num_filters, 2, 5)
+        network = l.layers.MaxPool2DLayer(
+            network,
+            name='pool2',
+            pool_size=(2, 2))
+        # post-conv shape = (minibatch_size, bottleneck_width, 1, 1)
+        network = l.layers.Conv2DLayer(
+            network,
+            name='bottleneck',
+            num_filters=self.bottleneck_width,
+            filter_size=(2, 5),
+            pad=0,
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.rectify)
+        # One last fully-connected layer
+        network = l.layers.DenseLayer(
+            network,
+            num_units=self.num_classes,
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.softmax)
+        return network
+    def _setup_cost(self, deterministic, array=False, **kwargs):
+        '''Construct the cross-entropy between the train set and the output.
+
+        Must be called after self.network is defined.'''
+        if deterministic:
+            prediction = self.test_prediction
+        else:
+            prediction = self.train_prediction
+        cost = l.objectives.categorical_crossentropy(prediction,
+                self.target_var)
+        if not array:
+            cost = l.objectives.aggregate(cost, mode='mean')
+        return cost
