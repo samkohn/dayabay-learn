@@ -334,6 +334,7 @@ class IBDPairConvAe2(IBDPairConvAe):
         means = preprocessing.center(x)
         min_, max_, = -1, 1
         mins, maxes = preprocessing.scale_min_max(x, min_, max_)
+        preprocessing.standardize_cylinder_rotation(x)
         def repeat_transformation(other):
             if len(other) == 0:
                 return
@@ -344,6 +345,7 @@ class IBDPairConvAe2(IBDPairConvAe):
                 other /= maxes - mins
                 other *= max_ - min_
                 other += min_
+                preprocessing.standardize_cylinder_rotation(other)
         return repeat_transformation
 
 class IBDChargeDenoisingConvAe(IBDPairConvAe2):
