@@ -51,6 +51,11 @@ def setup_parser():
         ' intentionally accidentals')
     parser.add_argument('--accidental-location', default=None,
         help='file path of accidentals h5 file')
+    parser.add_argument('--train-val-test', nargs=3, type=float,
+            default=[0.5, 0.25, 0.25],
+            metavar=('TRAIN_FRAC', 'VAL_FRAC', 'TEST_FRAC'),
+            help='how to divide the data set between training, evaluation, ' +
+            'and test data sets')
     return parser
 
 if __name__ == "__main__":
@@ -59,6 +64,9 @@ if __name__ == "__main__":
     logging.basicConfig(format='%(levelname)s:\t%(message)s')
     parser = setup_parser()
     args = parser.parse_args()
+    # enforce that the train-val-test arguments must sum to 1
+    if round(sum(args.train_val_test), 5) != 1.0:
+        raise ValueError('--train-val-test fractions must sum to 1')
     import numpy as np
     import os
     import pickle
@@ -90,6 +98,7 @@ if __name__ == "__main__":
         make_progress_plots = True
 
     supervised = set(['SinglesClassifier'])
+    train_frac, val_frac, test_frac = args.train_val_test
 
     #class for networks architecture
     logging.info('Constructing untrained ConvNet of class %s', args.network)
@@ -104,7 +113,7 @@ if __name__ == "__main__":
     only_charge = getattr(cae, 'only_charge', False)
     num_ibds = int(round((1 - args.accidental_fraction) * args.numpairs))
     train, val, test = get_ibd_data(tot_num_pairs=num_ibds,
-        just_charges=only_charge, train_frac=0.5, valid_frac=0.25)
+        just_charges=only_charge, train_frac=train_frac, valid_frac=val_frac)
     train_IBD = train
     val_IBD = val
     test_IBD = test
@@ -122,12 +131,11 @@ if __name__ == "__main__":
         train_acc, val_acc, test_acc = get_ibd_data(
                 path=path, tot_num_pairs=num_accidentals,
                 just_charges=only_charge, h5dataset=dsetname,
-                train_frac=0.5, valid_frac=0.25)
+                train_frac=train_frac, valid_frac=val_frac)
         if args.network == 'SinglesClassifier':
             train_acc = train_acc[:, 0:1, :, :]
             val_acc = val_acc[:, 0:1, :, :]
             test_acc = test_acc[:, 0:1, :, :]
-        logging.debug('train_acc[0] = %s', str(train_acc[0]))
         train = np.vstack((train, train_acc))
         val = np.vstack((val, val_acc))
         test = np.vstack((test, test_acc))
