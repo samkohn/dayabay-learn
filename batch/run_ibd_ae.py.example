@@ -1,15 +1,43 @@
-#!/bin/bash -l
+#!/bin/bash
+
+EPOCHS=10
+BOTTLENECK=256
+LEARN_RATE=0.01
+NSAMPLES=1024
+VERBOSE="-vvv"
+NETWORK="IBDChargeDenoisingConvAe"
+ACCIDENTAL_FRAC=0.5
+NAME="rotated"
+TRAIN_VAL_TEST="0.8 0.1 0.1"
+ID="e${EPOCHS}_w${BOTTLENECK}_n${NSAMPLES}_acc${ACCIDENTAL_FRAC}_$NAME"
+
 echo "Sourcing setup file"
 source ~skohn/setup_ml_cori.sh
 echo "Finished sourceing setup file"
+RUNLOG="$SLURM_SUBMIT_DIR/batch/logs/runs.log"
+echo "ID for this run: $ID"
+echo "Creating output directory..."
+CMD="mkdir $SLURM_SUBMIT_DIR/batch/tmp_output/$ID"
+echo "$CMD"
+$CMD
+
 echo "Start seconds"
 date +%s
 echo "---"
-python $SLURM_SUBMIT_DIR/ibd_ae.py -e 10 -w 256 \
--s model_e10_w256_n20000.npz \
--p reco_e10_w256_n20000.h5 \
--l 0.01 -n 20000 -vvv --network IBDChargeDenoisingConvAe \
---out-dir $SLURM_SUBMIT_DIR/batch/tmp_output
+>&2 echo "Begin"
+python $SLURM_SUBMIT_DIR/ibd_ae.py $VERBOSE -e $EPOCHS -w $BOTTLENECK \
+--train-val-test $TRAIN_VAL_TEST \
+-p reco_$ID.h5 \
+-s model_$ID.npz \
+-l 0.01 -n $NSAMPLES --network $NETWORK \
+--out-dir \
+$SLURM_SUBMIT_DIR/batch/tmp_output/$ID \
+--accidental-fraction $ACCIDENTAL_FRAC \
+--accidental-location \
+/project/projectdirs/dasrepo/ibd_pairs/accidentals.h5 \
+--logfile $RUNLOG
+>&2 echo "End"
+
 echo "End seconds"
 date +%s
 echo "---"
