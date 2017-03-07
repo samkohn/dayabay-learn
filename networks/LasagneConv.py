@@ -34,7 +34,8 @@ class IBDPairConvAe(AbstractNetwork):
         self.test_prediction = self._setup_prediction(deterministic=True)
         self.train_cost = self._setup_cost(deterministic=False,
                 weighted=weighted)
-        self.test_cost = self._setup_cost(deterministic=True, array=True)
+        # outputs the cost at each pixel
+        self.test_cost_all = self._setup_cost(deterministic=True, array=True)
         self.optimizer = self._setup_optimizer()
         if hasattr(self, 'target_var'):
             inputs = [self.input_var, self.target_var]
@@ -43,7 +44,7 @@ class IBDPairConvAe(AbstractNetwork):
         self.train_once = theano.function(inputs,
             [self.train_cost], updates=self.optimizer)
         self.predict_fn = theano.function(inputs,
-            [self.test_cost, self.test_prediction])
+            [self.test_cost_all, self.test_prediction])
 
     def _setup_network(self):
         '''Construct the ConvAe architecture for Daya Bay IBDs.'''
@@ -235,9 +236,11 @@ class IBDPairConvAe(AbstractNetwork):
             minislice = slice(i, i + self.minibatch_size)
             if y is None:
                 prediction = self.predict_fn(x[minislice])
+                prediction.append(prediction[0].mean(axis=(1, 2, 3)))
+                image_wise_index = len(prediction)-1
             else:
                 prediction = self.predict_fn(x[minislice], y[minislice])
-            output_cost[minislice] = prediction[0]
+            output_cost[minislice] = prediction[image_wise_index]
             output_prediction[minislice] = prediction[1]
         # account for any remaining inputs that don't make a complete minibatch
         num_extras = len(x) % self.minibatch_size
@@ -248,12 +251,14 @@ class IBDPairConvAe(AbstractNetwork):
         x_end = np.vstack((x[endslice], x[fillerslice]))
         if y is None:
             prediction = self.predict_fn(x_end)
+            prediction.append(prediction[0].mean(axis=(1, 2, 3)))
+            image_wise_index = len(prediction)-1
         else:
             logging.debug('y[endslice].shape = %s', str(y[endslice].shape))
             logging.debug('y[fillerslice].shape = %s', str(y[fillerslice].shape))
             y_end = np.concatenate((y[endslice], y[fillerslice]), axis=0)
             prediction = self.predict_fn(x_end, y_end)
-        output_cost[endslice] = prediction[0][:num_extras]
+        output_cost[endslice] = prediction[image_wise_index][:num_extras]
         output_prediction[endslice] = prediction[1][:num_extras]
         return (output_cost, output_prediction)
 
