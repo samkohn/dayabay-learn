@@ -32,6 +32,8 @@ def setup_parser():
         help='do t-SNE visualization')
     parser.add_argument('-v', '--verbose', default=0, action='count',
         help='default:quiet, 1:log_info, 2:+=plots, 3:+=log_debug')
+    parser.add_argument('--logfile', default='./runs.log',
+        help='location of the file to log each run (NOT all logger output)')
     parser.add_argument('--out-dir', default='.',
         help='directory to save all files that may be requested')
     parser.add_argument('--save-interval', default=10, type=int,
@@ -71,6 +73,7 @@ if __name__ == "__main__":
     import os
     import pickle
     import sys
+    import subprocess
     import h5py
     import matplotlib
     from sklearn.manifold import TSNE
@@ -97,6 +100,18 @@ if __name__ == "__main__":
         logging.getLogger().setLevel(logging.DEBUG)
         make_progress_plots = True
 
+    # Save the specific command run to the log file with a date and
+    # time stamp, and the git commit hash used.
+    commit_hash = subprocess.check_output(['git', 'describe',
+        '--always']).strip().split('-')[-1]
+    runlogger = logging.getLogger('runlogger')
+    runlogger.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('[%(asctime)-35s %(message)s',
+            datefmt='%Y-%b-%d %H:%M, git ' + commit_hash + ']')
+    handler = logging.FileHandler(args.logfile)
+    handler.setFormatter(formatter)
+    runlogger.addHandler(handler)
+    runlogger.debug(' '.join(sys.argv))
     supervised = set(['SinglesClassifier'])
     train_frac, val_frac, test_frac = args.train_val_test
 
