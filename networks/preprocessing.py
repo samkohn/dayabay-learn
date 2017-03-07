@@ -137,7 +137,7 @@ def standardize_cylinder_rotation(data):
     elif data.shape[1] == 2:
         delayed_charge_index = 1
     else:
-        raise ValueError('Invalid shape: %s', str(shape))
+        raise ValueError('Invalid shape: %s', str(data.shape))
     for i in xrange(data.shape[0]):
         event = data[i]
         delayed_charge = event[delayed_charge_index]
