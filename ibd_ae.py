@@ -30,6 +30,8 @@ def setup_parser():
         help='the learning rate for the network')
     parser.add_argument('--tsne', action='store_true',
         help='do t-SNE visualization')
+    parser.add_argument('--cylinder-rotation', default=None,
+        help='Argument to pass to preprocessing.standardize_cylinder_rotation')
     parser.add_argument('-v', '--verbose', default=0, action='count',
         help='default:quiet, 1:log_info, 2:+=plots, 3:+=log_debug')
     parser.add_argument('--logfile', default='./runs.log',
@@ -63,12 +65,17 @@ def setup_parser():
 if __name__ == "__main__":
     import argparse
     import logging
+    import ast
     logging.basicConfig(format='%(levelname)s:\t%(message)s')
     parser = setup_parser()
     args = parser.parse_args()
     # enforce that the train-val-test arguments must sum to 1
     if round(sum(args.train_val_test), 5) != 1.0:
         raise ValueError('--train-val-test fractions must sum to 1')
+    if args.cylinder_rotation is None:
+        pass
+    else:
+        args.cylinder_rotation = ast.literal_eval(args.cylinder_rotation)
     import numpy as np
     import os
     import pickle
@@ -154,7 +161,7 @@ if __name__ == "__main__":
         train = np.vstack((train, train_acc))
         val = np.vstack((val, val_acc))
         test = np.vstack((test, test_acc))
-    preprocess = cae.preprocess_data(train)
+    preprocess = cae.preprocess_data(train, channel=args.cylinder_rotation)
     preprocess(val)
     preprocess(test)
 

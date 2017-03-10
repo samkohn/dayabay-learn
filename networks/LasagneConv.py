@@ -329,7 +329,7 @@ class IBDPairConvAe2(IBDPairConvAe):
         network.nonlinearity = l.nonlinearities.tanh
         return network
 
-    def preprocess_data(self, x, y=None):
+    def preprocess_data(self, x, y=None, **kwargs):
         '''Prepare the data for the neural network.
 
             - Remove 0's from the time channels
@@ -339,7 +339,11 @@ class IBDPairConvAe2(IBDPairConvAe):
         means = preprocessing.center(x)
         min_, max_, = -1, 1
         mins, maxes = preprocessing.scale_min_max(x, min_, max_)
-        preprocessing.standardize_cylinder_rotation(x)
+        if 'channel' in kwargs:
+            channel = kwargs['channel']
+        else:
+            channel = None
+        preprocessing.standardize_cylinder_rotation(x, channel)
         def repeat_transformation(other):
             if len(other) == 0:
                 return
@@ -350,7 +354,7 @@ class IBDPairConvAe2(IBDPairConvAe):
                 other /= maxes - mins
                 other *= max_ - min_
                 other += min_
-                preprocessing.standardize_cylinder_rotation(other)
+                preprocessing.standardize_cylinder_rotation(other, channel)
         return repeat_transformation
 
 class IBDChargeDenoisingConvAe(IBDPairConvAe2):
