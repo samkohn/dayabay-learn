@@ -126,24 +126,51 @@ def get_equal_per_class(X,y, nclass):
     
     return X,y
 
-def standardize_cylinder_rotation(data):
-    '''cyclicly permute each event so that the PMT with the most delayed charge
-    is in the center column.'''
+def standardize_cylinder_rotation(data, channel=None):
+    '''cyclicly permute each event so that the PMT with the highest value in
+    the specified channel is is in the center column.
+
+    By default (channel == None), the delayed charge is used, and the rest of
+    the channels are rotated accordingly. If channel is an integer, that
+    channel is used, and the rest of the channels are rotated accordingly. If
+    channel is a dict of {int:[int]}, the key channels will be rotated
+    independently of each other, and the value channels will be rotated with
+    the corresponding key.
+
+    For example, for a 2-channel image, to rotate channel independently,
+    pass channel={0:[], 1:[]}. For a 4-channel image, to rotate the first 2
+    to center channel 0 and the second 2 to center channel 3, pass
+    channel={0:[1], 3:[2]}.
+    '''
     center_column = int(data.shape[-1]/2)
     # Assign delayed charge index based on charge+time or just charge
     # in the array
-    if data.shape[1] == 4:
-        delayed_charge_index = 2
-    elif data.shape[1] == 2:
-        delayed_charge_index = 1
-    else:
-        raise ValueError('Invalid shape: %s', str(data.shape))
+    if channel is None:
+        if data.shape[1] == 4:
+            channel = 2
+        elif data.shape[1] == 2:
+            channel = 1
+        else:
+            raise ValueError('Invalid shape: %s', str(data.shape))
     for i in xrange(data.shape[0]):
         event = data[i]
-        delayed_charge = event[delayed_charge_index]
-        argmax_flat = np.argmax(delayed_charge)
-        argmax = np.unravel_index(argmax_flat, delayed_charge.shape)
-        column_with_max = argmax[1]
-        columns_to_shift = center_column - column_with_max
-        data[i] = np.roll(event, columns_to_shift, axis=2)
+        if hasattr(channel, 'keys'):
+            for key in channel.keys():
+                channel_values = event[key]
+                argmax_flat = np.argmax(channel_values)
+                argmax = np.unravel_index(argmax_flat, channel_values.shape)
+                column_with_max = argmax[1]
+                columns_to_shift = center_column - column_with_max
+                data[i, key] = np.roll(channel_values, columns_to_shift,
+                        axis=1)
+                for other_channel in channel[key]:
+                    data[i, other_channel] = np.roll(event[other_channel],
+                        columns_to_shift, axis=1)
+        else:
+            delayed_charge = event[channel]
+            argmax_flat = np.argmax(delayed_charge)
+            argmax = np.unravel_index(argmax_flat, delayed_charge.shape)
+            column_with_max = argmax[1]
+            columns_to_shift = center_column - column_with_max
+            data[i] = np.roll(event, columns_to_shift, axis=2)
     return data
