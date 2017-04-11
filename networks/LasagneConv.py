@@ -280,7 +280,7 @@ class IBDPairConvAe(AbstractNetwork):
         raise ValueError('"%s" is not a layer in our network' % name)
 
 
-    def preprocess_data(self, x, y=None):
+    def preprocess_data(self, x, y=None, **kwargs):
         '''Prepare the data for the neural network.
 
             - Remove 0's from the time channels
@@ -291,6 +291,11 @@ class IBDPairConvAe(AbstractNetwork):
             preprocessing.fix_time_zeros(x)
         means = preprocessing.center(x)
         stds = preprocessing.scale(x, std, mode='standardize')
+        if 'channel' in kwargs:
+            channel = kwargs['channel']
+        else:
+            channel = None
+        preprocessing.standardize_cylinder_rotation(x, channel)
         def repeat_transformation(other):
             if len(other) == 0:
                 return
