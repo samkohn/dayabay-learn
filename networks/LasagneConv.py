@@ -463,3 +463,75 @@ class SinglesClassifier(IBDPairConvAe):
         if not array:
             cost = l.objectives.aggregate(cost, mode='mean')
         return cost
+
+class ChargePairClassifier1(IBDPairConvAe):
+    '''A supervised network for classifying prompt-delayed charge pairs.'''
+    def __init__(self, *args, **kwargs):
+        nchannels = 2
+        self.num_classes = 2
+        self.only_charge = True
+        self.target_var = T.lvector('target')
+        super(ChargePairClassifier1, self).__init__(*args, nchannels=nchannels,
+                **kwargs)
+
+    def _default_network_with_input(self, incoming):
+        num_filters = 128
+        initial_weights = l.init.Normal(1.0/self.num_features, 0)
+        network = incoming
+        # post-conv shape = (minibatch_size, num_filters, 8, 24)
+        network = l.layers.Conv2DLayer(
+            network,
+            name='conv1',
+            num_filters=num_filters,
+            filter_size=(5, 5),
+            pad=(2, 2),
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.rectify)
+        # post-pool shape = (minibatch_size, num_filters, 4, 12)
+        network = l.layers.MaxPool2DLayer(
+            network,
+            name='pool1',
+            pool_size=(2, 2))
+        # post-conv shape = (minibatch_size, num_filters, 4, 10)
+        network = l.layers.Conv2DLayer(
+            network,
+            name='conv2',
+            num_filters=num_filters,
+            filter_size=(3, 3),
+            pad=(1, 0),
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.rectify)
+        # post-pool shape = (minibatch_size, num_filters, 2, 5)
+        network = l.layers.MaxPool2DLayer(
+            network,
+            name='pool2',
+            pool_size=(2, 2))
+        # post-conv shape = (minibatch_size, bottleneck_width, 1, 1)
+        network = l.layers.Conv2DLayer(
+            network,
+            name='bottleneck',
+            num_filters=self.bottleneck_width,
+            filter_size=(2, 5),
+            pad=0,
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.rectify)
+        # One last fully-connected layer
+        network = l.layers.DenseLayer(
+            network,
+            num_units=self.num_classes,
+            W=initial_weights,
+            nonlinearity=l.nonlinearities.softmax)
+        return network
+    def _setup_cost(self, deterministic, array=False, **kwargs):
+        '''Construct the cross-entropy between the train set and the output.
+
+        Must be called after self.network is defined.'''
+        if deterministic:
+            prediction = self.test_prediction
+        else:
+            prediction = self.train_prediction
+        cost = l.objectives.categorical_crossentropy(prediction,
+                self.target_var)
+        if not array:
+            cost = l.objectives.aggregate(cost, mode='mean')
+        return cost
