@@ -115,6 +115,10 @@ if __name__ == "__main__":
     # time stamp, and the git commit hash used.
     commit_hash = subprocess.check_output(['git', 'describe',
         '--always']).strip().split('-')[-1]
+    tree_is_dirty = (len(subprocess.check_output(['git', 'diff-index', 'HEAD']))
+            > 0)
+    if tree_is_dirty:
+        commit_hash += '+'
     runlogger = logging.getLogger('runlogger')
     runlogger.setLevel(logging.DEBUG)
     formatter = logging.Formatter('[%(asctime)-35s %(message)s',
