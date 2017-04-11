@@ -238,9 +238,10 @@ class IBDPairConvAe(AbstractNetwork):
                 prediction = self.predict_fn(x[minislice])
                 prediction.append(prediction[0].mean(axis=(1, 2, 3)))
                 image_wise_index = len(prediction)-1
+                output_cost[minislice] = prediction[image_wise_index]
             else:
                 prediction = self.predict_fn(x[minislice], y[minislice])
-            output_cost[minislice] = prediction[image_wise_index]
+                output_cost[minislice] = prediction[0]
             output_prediction[minislice] = prediction[1]
         # account for any remaining inputs that don't make a complete minibatch
         num_extras = len(x) % self.minibatch_size
@@ -253,12 +254,11 @@ class IBDPairConvAe(AbstractNetwork):
             prediction = self.predict_fn(x_end)
             prediction.append(prediction[0].mean(axis=(1, 2, 3)))
             image_wise_index = len(prediction)-1
+            output_cost[endslice] = prediction[image_wise_index][:num_extras]
         else:
-            logging.debug('y[endslice].shape = %s', str(y[endslice].shape))
-            logging.debug('y[fillerslice].shape = %s', str(y[fillerslice].shape))
             y_end = np.concatenate((y[endslice], y[fillerslice]), axis=0)
             prediction = self.predict_fn(x_end, y_end)
-        output_cost[endslice] = prediction[image_wise_index][:num_extras]
+            output_cost[endslice] = prediction[0][:num_extras]
         output_prediction[endslice] = prediction[1][:num_extras]
         return (output_cost, output_prediction)
 
