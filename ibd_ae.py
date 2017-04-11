@@ -48,6 +48,7 @@ def setup_parser():
             'IBDPairConvAe2',
             'IBDChargeDenoisingConvAe',
             'SinglesClassifier',
+            'ChargePairClassifier1',
         ],
         help='network to use')
     parser.add_argument('--accidental-fraction', type=float, default=0,
@@ -93,8 +94,11 @@ if __name__ == "__main__":
     from util.helper_fxns import make_accidentals
     from networks.LasagneConv import IBDPairConvAe, IBDPairConvAe2
     from networks.LasagneConv import IBDChargeDenoisingConvAe
-    from networks.LasagneConv import SinglesClassifier
+    from networks.LasagneConv import SinglesClassifier, ChargePairClassifier1
 
+    # This section process all of the command line arguments
+
+    # Set up logging verbosity and progress plots
     make_progress_plots = False
     if args.verbose == 0:
         pass
@@ -119,10 +123,14 @@ if __name__ == "__main__":
     handler.setFormatter(formatter)
     runlogger.addHandler(handler)
     runlogger.debug(' '.join(sys.argv))
-    supervised = set(['SinglesClassifier'])
+
+
     train_frac, val_frac, test_frac = args.train_val_test
 
-    #class for networks architecture
+    # Gather all the classifier networks since they require different behavior
+    supervised = set(['SinglesClassifier', 'ChargePairClassifier1'])
+
+    # Create the class instance for the desired neural net
     logging.info('Constructing untrained ConvNet of class %s', args.network)
     convnet_class = eval(args.network)
     cae = convnet_class(bottleneck_width=args.bottleneck_width,
@@ -131,7 +139,9 @@ if __name__ == "__main__":
     if args.load_model:
         logging.info('Loading model parameters from file %s', args.load_model)
         cae.load(args.load_model)
-    logging.info('Preprocessing data files')
+
+    # Read in the saved IBD data
+    logging.info('Loading IBD data files')
     only_charge = getattr(cae, 'only_charge', False)
     num_ibds = int(round((1 - args.accidental_fraction) * args.numpairs))
     train, val, test = get_ibd_data(tot_num_pairs=num_ibds,
@@ -139,11 +149,14 @@ if __name__ == "__main__":
     train_IBD = train
     val_IBD = val
     test_IBD = test
+    # Extract the right channel for the Singles Classifier
     if args.network == 'SinglesClassifier':
         train = train[:, 1:2, :, :]
         val = val[:, 1:2, :, :]
         test = test[:, 1:2, :, :]
+    # Load up the accidentals
     if args.accidental_fraction > 0:
+        logging.info('Loading accidentals')
         num_accidentals = args.numpairs - num_ibds
         if args.accidental_location is None:
             path='/global/homes/s/skohn/ml/dayabay-data-conversion/extract_accidentals/accidentals3.h5'
@@ -154,6 +167,7 @@ if __name__ == "__main__":
                 path=path, tot_num_pairs=num_accidentals,
                 just_charges=only_charge, h5dataset=dsetname,
                 train_frac=train_frac, valid_frac=val_frac)
+        # Extract the right channel for the Singles Classifier
         if args.network == 'SinglesClassifier':
             train_acc = train_acc[:, 0:1, :, :]
             val_acc = val_acc[:, 0:1, :, :]
@@ -161,11 +175,15 @@ if __name__ == "__main__":
         train = np.vstack((train, train_acc))
         val = np.vstack((val, val_acc))
         test = np.vstack((test, test_acc))
+    # Run data through the preprocessor
+    logging.info('Preprocessing data')
     preprocess = cae.preprocess_data(train, channel=args.cylinder_rotation)
     preprocess(val)
     preprocess(test)
 
-    if args.network == 'SinglesClassifier':
+    # Set up the targets. The IBDs go first and have a target of 0, and the
+    # others (accidentals or flashers) go last and have a target of 1.
+    if args.network in supervised:
         train_targets = np.zeros((train.shape[0]), dtype=int)
         val_targets = np.zeros((val.shape[0]), dtype=int)
         test_targets = np.zeros((test.shape[0]), dtype=int)
