@@ -19,11 +19,11 @@ min_, max_ = -1, 1
 mins, maxes = preprocessing.scale_min_max(train_set, min_, max_)
 
 # Create model
-model = nn.get_model(256)
-nn.compile_model(model)
+autoencoder, encoder, decoder = nn.get_models(256)
+nn.compile_model(autoencoder)
 
 # Train
 tensorboard = nn.keras.callbacks.TensorBoard(log_dir='.', histogram_freq=1,
         write_images=True)
-results = model.fit(train_set, train_set, epochs=10, batch_size=100,
+results = autoencoder.fit(train_set, train_set, epochs=4, batch_size=100,
         callbacks=[tensorboard])
