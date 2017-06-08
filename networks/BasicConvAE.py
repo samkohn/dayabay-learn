@@ -16,7 +16,8 @@ def get_model(bottleneck_width):
     num_features = 8 * 24 * 2
     init = keras.initializers.RandomNormal(mean=0,stddev=1.0/num_features)
 
-    model.add(ZeroPadding2D((2, 2), input_shape=(2, 8, 24)))
+    model.add(Dropout(0.3, input_shape=(2, 8, 24)))
+    model.add(ZeroPadding2D((2, 2)))#, input_shape=(2, 8, 24)))
     # input shape = (2, 12, 28)
     model.add(Conv2D(128, (5, 5), activation='relu', kernel_initializer=init))
     # input shape = (128, 8, 24)
@@ -40,7 +41,7 @@ def get_model(bottleneck_width):
     model.add(Conv2DTranspose(128, (2, 5), strides=(2, 2), activation='relu',
         kernel_initializer=init, data_format=keras.backend.image_data_format()))
     # input shape = (128, 4, 11)
-    model.add(Conv2DTranspose(2, (2, 4), strides=(2, 2), activation='relu',
+    model.add(Conv2DTranspose(2, (2, 4), strides=(2, 2), activation='tanh',
         kernel_initializer=init, data_format=keras.backend.image_data_format()))
     #output shape = (2, 8, 24)
     return model
