@@ -23,13 +23,7 @@ model = nn.get_model(256)
 nn.compile_model(model)
 
 # Train
-def printweights(epoch, logs):
-    print ""
-    print model.get_weights()[0][1][0][0][5]
-    return
-debug_callback = nn.keras.callbacks.LambdaCallback(
-        on_epoch_begin=printweights)
 tensorboard = nn.keras.callbacks.TensorBoard(log_dir='.', histogram_freq=1,
         write_images=True)
 results = model.fit(train_set, train_set, epochs=10, batch_size=100,
-        callbacks=[debug_callback, tensorboard])
+        callbacks=[tensorboard])
