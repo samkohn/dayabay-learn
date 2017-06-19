@@ -10,6 +10,7 @@ from keras.models import Model
 from keras.layers import Dense, Dropout, Input
 from keras.layers import Conv2D, MaxPooling2D, ZeroPadding2D
 from keras.layers import Conv2DTranspose
+from keras.initializers import TruncatedNormal
 
 def get_models(bottleneck_width):
     """
@@ -18,7 +19,7 @@ def get_models(bottleneck_width):
 
     """
     num_features = 8 * 24 * 2
-    init = keras.initializers.RandomNormal(mean=0,stddev=1.0/num_features)
+    init = TruncatedNormal(mean=0,stddev=1.0/np.sqrt(num_features))
 
     input_layer = Input(shape=(2, 8, 24))
     corruption = Dropout(0.3)(input_layer)
