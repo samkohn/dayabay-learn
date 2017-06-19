@@ -1,4 +1,5 @@
 import numpy as np
+import h5py
 import networks.BasicConvAE as nn
 import networks.preprocessing as preprocessing
 from util.data_loaders import get_ibd_data
@@ -22,7 +23,18 @@ autoencoder, encoder = nn.get_models(16)
 nn.compile_model(autoencoder)
 
 # Train
-tensorboard = nn.keras.callbacks.TensorBoard(log_dir='.', histogram_freq=1,
-        write_images=True)
-results = autoencoder.fit(train_set, train_set, epochs=4, batch_size=100,
+tensorboard = nn.keras.callbacks.TensorBoard(log_dir='batch/logs/tensorboard', write_images=True)
+results = autoencoder.fit(train_set, train_set, epochs=500, batch_size=128,
         callbacks=[tensorboard])
+num_to_save = 1000
+encodings = encoder.predict(train_set[:num_to_save])
+reconstructions = autoencoder.predict(train_set[:num_to_save])
+autoencoder.save_weights('output_weights.h5')
+with h5py.File('output.h5') as outfile:
+    input_dataset = outfile.create_dataset('input',
+            data=train_set[:num_to_save],
+            compression='gzip', chunks=True)
+    encodings_dataset = outfile.create_dataset('encodings', data=encodings,
+            compression='gzip', chunks=True)
+    reconstructions_dataset = outfile.create_dataset('reconstructions',
+            data=reconstructions, compression='gzip', chunks=True)
