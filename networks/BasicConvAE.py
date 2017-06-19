@@ -41,10 +41,9 @@ def get_models(bottleneck_width):
             kernel_initializer=init)(pool2)
 
     # middle of network. input shape = (bottleneck_width, 1, 1)
-    decoder_input_layer = Input(shape=(bottleneck_width, 1, 1))
     deconv1 = Conv2DTranspose(128, (2, 4), strides=(2, 2), activation='relu',
             kernel_initializer=init,
-            data_format=keras.backend.image_data_format())(decoder_input_layer)
+            data_format=keras.backend.image_data_format())(conv3)
     # input shape = (128, 2, 4)
     deconv2 = Conv2DTranspose(128, (2, 5), strides=(2, 2), activation='relu',
             kernel_initializer=init,
@@ -56,11 +55,9 @@ def get_models(bottleneck_width):
     #output shape = (2, 8, 24)
 
     encoder = Model(input_layer, conv3, name='encoder')
-    decoder = Model(decoder_input_layer, deconv3, name='decoder')
-    autoencoder = Model(input_layer, decoder(encoder.output),
-        name='autoencoder')
+    autoencoder = Model(input_layer, deconv3, name='autoencoder')
 
-    return (autoencoder, encoder, decoder)
+    return (autoencoder, encoder)
 
 def compile_model(model):
     model.compile(

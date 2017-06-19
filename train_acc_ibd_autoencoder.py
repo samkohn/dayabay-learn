@@ -19,7 +19,7 @@ min_, max_ = -1, 1
 mins, maxes = preprocessing.scale_min_max(train_set, min_, max_)
 
 # Create model
-autoencoder, encoder, decoder = nn.get_models(256)
+autoencoder, encoder = nn.get_models(16)
 nn.compile_model(autoencoder)
 
 # Train
