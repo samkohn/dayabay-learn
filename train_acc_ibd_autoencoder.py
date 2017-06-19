@@ -3,18 +3,17 @@ import networks.BasicConvAE as nn
 import networks.preprocessing as preprocessing
 from util.data_loaders import get_ibd_data
 
+num_pairs = 9000
 # Load ibd and accidental data
-train_ibd, _, _ = get_ibd_data(tot_num_pairs=2000, just_charges=True,
+train_ibd, _, _ = get_ibd_data(tot_num_pairs=num_pairs, just_charges=True,
         train_frac=1, valid_frac=0)
 train_acc, _, _ = \
 get_ibd_data(path='/project/projectdirs/dasrepo/ibd_pairs/accidentals.h5',
         h5dataset='accidentals_bg_data',
-        tot_num_pairs=2000, just_charges=True, train_frac=1, valid_frac=0)
+        tot_num_pairs=num_pairs, just_charges=True, train_frac=1, valid_frac=0)
 train_set = np.vstack((train_ibd, train_acc))
-#train_set = train_ibd
 
-# Preprocessing: set mean to 0 and min, max to -1, 1
-means = preprocessing.center(train_set)
+# Preprocessing: set min, max to -1, 1
 min_, max_ = -1, 1
 mins, maxes = preprocessing.scale_min_max(train_set, min_, max_)
 

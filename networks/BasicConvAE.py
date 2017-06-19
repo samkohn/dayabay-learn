@@ -62,5 +62,5 @@ def get_models(bottleneck_width):
 def compile_model(model):
     model.compile(
         loss='mean_squared_error',
-        optimizer=keras.optimizers.SGD(lr=0.1, momentum=0.9),
+        optimizer=keras.optimizers.SGD(lr=0.01, momentum=0.9),
         metrics=['mse'])
