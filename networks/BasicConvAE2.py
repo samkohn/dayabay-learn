@@ -8,7 +8,7 @@ import h5py
 import keras
 from keras.models import Model
 from keras.layers import Dense, Dropout, Input
-from keras.layers import Conv2D, MaxPooling2D, ZeroPadding2D
+from keras.layers import Conv2D, MaxPooling2D, ZeroPadding2D, UpSampling2D, Cropping2D
 from keras.layers import Conv2DTranspose
 from keras.initializers import TruncatedNormal
 
@@ -41,21 +41,33 @@ def get_models(bottleneck_width):
             kernel_initializer=init)(pool2)
 
     # middle of network. input shape = (bottleneck_width, 1, 1)
-    deconv1 = Conv2DTranspose(128, (2, 4), strides=(2, 2), activation='relu',
+    deconv1 = Conv2DTranspose(128, (2, 5), activation='relu',
             kernel_initializer=init,
             data_format=keras.backend.image_data_format())(conv3)
-    # input shape = (128, 2, 4)
-    deconv2 = Conv2DTranspose(128, (2, 5), strides=(2, 2), activation='relu',
-            kernel_initializer=init,
+    # input shape = (128, 2, 5)
+    unpool1 = UpSampling2D(size=(2, 2),
             data_format=keras.backend.image_data_format())(deconv1)
-    # input shape = (128, 4, 11)
-    deconv3 = Conv2DTranspose(2, (2, 4), strides=(2, 2), activation='tanh',
+    # input shape = (128, 4, 10)
+    deconv2 = Conv2DTranspose(128, (3, 3), activation='relu',
             kernel_initializer=init,
+            data_format=keras.backend.image_data_format())(unpool1)
+    # input shape = (128, 6, 12)
+    crop1 = Cropping2D(cropping=(1, 0),
             data_format=keras.backend.image_data_format())(deconv2)
+    # input shape = (128, 4, 12)
+    unpool2 = UpSampling2D(size=(2, 2),
+            data_format=keras.backend.image_data_format())(crop1)
+    # input shape = (128, 8, 24)
+    deconv3 = Conv2DTranspose(2, (5, 5), activation='tanh',
+            kernel_initializer=init,
+            data_format=keras.backend.image_data_format())(unpool2)
+    # input shape = (128, 12, 28)
+    crop2 = Cropping2D(cropping=(2, 2),
+            data_format=keras.backend.image_data_format())(deconv3)
     #output shape = (2, 8, 24)
 
     encoder = Model(input_layer, conv3, name='encoder')
-    autoencoder = Model(input_layer, deconv3, name='autoencoder')
+    autoencoder = Model(input_layer, crop2, name='autoencoder')
 
     return (autoencoder, encoder)
 

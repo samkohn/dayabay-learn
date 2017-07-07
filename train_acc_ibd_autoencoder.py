@@ -3,6 +3,7 @@ import h5py
 import sys
 import os
 import networks.BasicConvAE as nn
+import networks.BasicConvAE2 as nn2
 import networks.preprocessing as preprocessing
 from util.data_loaders import get_ibd_data
 import callbacks as cb
@@ -52,8 +53,8 @@ min_, max_ = -1, 1
 mins, maxes = preprocessing.scale_min_max(train_set, min_, max_)
 
 # Create model
-autoencoder, encoder = nn.get_models(16)
-nn.compile_model(autoencoder)
+autoencoder, encoder = nn2.get_models(16)
+nn2.compile_model(autoencoder)
 models = {'encodings':encoder, 'reconstructions': autoencoder}
 
 # Train
