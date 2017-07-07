@@ -3,8 +3,15 @@ import h5py
 import networks.BasicConvAE as nn
 import networks.preprocessing as preprocessing
 from util.data_loaders import get_ibd_data
+import logs
 
 num_pairs = 9000
+logger = logs.get_tee_logger('test.log')
+logger.info('Beginning training module')
+
+logfile = 'runs.log'
+logs.log_with_git_hash(' '.join(sys.argv), logfile)
+
 # Load ibd and accidental data
 train_ibd, _, _ = get_ibd_data(tot_num_pairs=num_pairs, just_charges=True,
         train_frac=1, valid_frac=0)
