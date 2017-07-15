@@ -1,15 +1,5 @@
-import numpy as np
-import h5py
-import sys
-import os
-import networks.BasicConvAE as nn
-import networks.BasicConvAE2 as nn2
-import networks.preprocessing as preprocessing
-from util.data_loaders import get_ibd_data
-import callbacks as cb
-import logs
+# First parse all the arguments to quit fast if there's an error
 import argparse
-
 parser = argparse.ArgumentParser()
 parser.add_argument('-e', '--epochs', type=int, default=10,
         help='number of epochs to train for')
@@ -27,6 +17,19 @@ parser.add_argument('--save-interval', type=int, default=10,
         help='number of epochs between saving intermediate output')
 
 args = parser.parse_args()
+
+# Import all other modules
+import numpy as np
+import h5py
+import sys
+import os
+import networks.BasicConvAE as nn
+import networks.BasicConvAE2 as nn2
+import networks.preprocessing as preprocessing
+from util.data_loaders import get_ibd_data
+import callbacks as cb
+import logs
+
 output_folder = args.output
 logger = logs.get_tee_logger(os.path.join(output_folder, args.run_logfile))
 logs.log_with_git_hash(' '.join(sys.argv), args.master_logfile)
