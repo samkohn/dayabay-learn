@@ -1,5 +1,5 @@
 """
-Build a basic convolutional autoencoder using the Keras framework.
+Build a basic convolutional classifier using the Keras framework.
 
 """
 
@@ -7,15 +7,14 @@ import numpy as np
 import h5py
 import keras
 from keras.models import Model
-from keras.layers import Dense, Dropout, Input
+from keras.layers import Dense, Dropout, Input, Flatten
 from keras.layers import Conv2D, MaxPooling2D, ZeroPadding2D
-from keras.layers import Conv2DTranspose
 from keras.initializers import TruncatedNormal
 
 def get_models(bottleneck_width):
     """
-    Construct an (autoencoder, encoder, decoder) model and return the three
-    segments in a tuple in that order.
+    Construct a (classifier, encoder) model and return the two
+    models in a tuple in that order.
 
     """
     num_features = 8 * 24 * 2
@@ -41,25 +40,21 @@ def get_models(bottleneck_width):
             kernel_initializer=init)(pool2)
 
     # middle of network. input shape = (bottleneck_width, 1, 1)
-    deconv1 = Conv2DTranspose(128, (2, 4), strides=(2, 2), activation='relu',
-            kernel_initializer=init,
-            data_format=keras.backend.image_data_format())(conv3)
-    # input shape = (128, 2, 4)
-    deconv2 = Conv2DTranspose(128, (2, 5), strides=(2, 2), activation='relu',
-            kernel_initializer=init,
-            data_format=keras.backend.image_data_format())(deconv1)
-    # input shape = (128, 4, 11)
-    deconv3 = Conv2DTranspose(2, (2, 4), strides=(2, 2), activation='tanh',
-            kernel_initializer=init,
-            data_format=keras.backend.image_data_format())(deconv2)
-    #output shape = (2, 8, 24)
+    conv3a = Flatten()(conv3)
+    dense1 = Dense(128, activation='relu')(conv3a)
+    dense1a = Dropout(0.3, seed=1739)(dense1)
+    dense2 = Dense(16, activation='relu')(dense1a)
+    dense2a = Dropout(0.3, seed=1740)(dense2)
+    dense3 = Dense(2, activation='softmax')(dense2a)
 
     encoder = Model(input_layer, conv3, name='encoder')
-    autoencoder = Model(input_layer, deconv3, name='autoencoder')
+    classifier = Model(input_layer, dense3, name='classifier')
 
-    return (autoencoder, encoder)
+    return (classifier, encoder)
 
 def compile_model(model):
     model.compile(
-        loss='mean_squared_error',
-        optimizer=keras.optimizers.SGD(lr=0.01, momentum=0.9))
+        loss='categorical_crossentropy',
+        optimizer=keras.optimizers.SGD(lr=0.01, momentum=0.9),
+        metrics=['categorical_accuracy'])
+
