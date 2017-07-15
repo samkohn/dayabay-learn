@@ -15,7 +15,8 @@ parser.add_argument('-o', '--output', default='.',
         help='folder to save all files generated in this run')
 parser.add_argument('--save-interval', type=int, default=10,
         help='number of epochs between saving intermediate output')
-
+parser.add_argument('--cylinder-rotation', default=None,
+        help='Argument to pass to preprocessing.standardize_cylinder_rotation')
 args = parser.parse_args()
 
 # Import all other modules
@@ -29,6 +30,7 @@ import networks.preprocessing as preprocessing
 from util.data_loaders import get_ibd_data
 import callbacks as cb
 import logs
+import ast # used to parse --cylinder-rotation arg
 
 output_folder = args.output
 logger = logs.get_tee_logger(os.path.join(output_folder, args.run_logfile))
@@ -36,6 +38,9 @@ logs.log_with_git_hash(' '.join(sys.argv), args.master_logfile)
 numpairs = args.numpairs
 epochs = args.epochs
 save_interval = args.save_interval
+# Parse the "cylinder-rotation" argument into a dict
+if args.cylinder_rotation is not None:
+    args.cylinder_rotation = ast.literal_eval(args.cylinder_rotation)
 
 logger.info('Beginning training module')
 
@@ -54,6 +59,10 @@ classes = np.hstack((np.zeros(num_ibds), np.ones(num_acc)))
 # Preprocessing: set min, max to -1, 1
 min_, max_ = -1, 1
 mins, maxes = preprocessing.scale_min_max(train_set, min_, max_)
+
+# Preprocessing: cyclically permute ("rotate") images
+train_set = preprocessing.standardize_cylinder_rotation(train_set,
+        channel=args.cylinder_rotation)
 
 # Create model
 autoencoder, encoder = nn2.get_models(16)
